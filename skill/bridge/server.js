@@ -102,6 +102,17 @@ const sseBuffer = [];
 /** @type {Set<http.ServerResponse>} */
 const sseClients = new Set();
 
+// Channel (official Claude Code Channels integration — see channel.js)
+/** Prompts queued by the watch, waiting to be injected into the live session. */
+const channelInbox = [];
+/** Long-poll responses from channel.js awaiting a prompt. */
+let channelWaiters = [];
+/** Timestamp of the last /channel/inbox poll — used to detect a live channel. */
+let lastChannelPollAt = 0;
+const CHANNEL_LIVE_WINDOW_MS = 60_000;
+const CHANNEL_LONGPOLL_MS = 25_000;
+const channelConnected = () => Date.now() - lastChannelPollAt < CHANNEL_LIVE_WINDOW_MS;
+
 // Permission flow
 /** @type {Map<string, {resolve: Function, timer: ReturnType<typeof setTimeout>, sessionId: string | null}>} */
 const pendingPermissions = new Map();
@@ -1061,6 +1072,22 @@ async function handleCommand(req, res) {
     return jsonResponse(res, 404, { error: "No pending permission with that ID" });
   }
 
+  // --- Channel injection (official Channels path, preferred when live) ---
+  // If channel.js is connected, route the prompt into the running session via
+  // the Claude Code channel instead of spawning a one-shot `claude -p`.
+  if (command !== undefined && channelConnected()) {
+    const text = command.replace(/\n$/, "").trim();
+    if (!text) {
+      return jsonResponse(res, 400, { error: "Empty command" });
+    }
+    channelInbox.push({ text, sessionId: sessionId || null, at: Date.now() });
+    const waiters = channelWaiters;
+    channelWaiters = [];
+    for (const w of waiters) w();
+    log("info", `Queued prompt for channel: "${text.slice(0, 80)}"`);
+    return jsonResponse(res, 200, { ok: true, viaChannel: true });
+  }
+
   // --- PTY command injection ---
   if (command !== undefined) {
     // Find the target session
@@ -1404,6 +1431,59 @@ function handleStatus(_req, res) {
 }
 
 // ---------------------------------------------------------------------------
+// Channel endpoints (used by channel.js — localhost only, like /hooks/*)
+// ---------------------------------------------------------------------------
+
+/** Long-poll: channel.js asks for queued prompts; we hold until one arrives. */
+function handleChannelInbox(req, res) {
+  lastChannelPollAt = Date.now();
+
+  const flush = () => {
+    const prompts = channelInbox.splice(0, channelInbox.length);
+    jsonResponse(res, 200, { prompts });
+  };
+
+  if (channelInbox.length > 0) {
+    return flush();
+  }
+
+  // Park the request until a prompt is enqueued or the long-poll times out.
+  const timer = setTimeout(() => {
+    channelWaiters = channelWaiters.filter((w) => w !== wake);
+    jsonResponse(res, 200, { prompts: [] });
+  }, CHANNEL_LONGPOLL_MS);
+
+  const wake = () => {
+    clearTimeout(timer);
+    flush();
+  };
+  channelWaiters.push(wake);
+
+  req.on("close", () => {
+    clearTimeout(timer);
+    channelWaiters = channelWaiters.filter((w) => w !== wake);
+  });
+}
+
+/** Claude's reply (via the watch_reply tool) → push to the watch over SSE. */
+async function handleChannelReply(req, res) {
+  if (req.method !== "POST") {
+    return jsonResponse(res, 405, { error: "Method not allowed" });
+  }
+  let body;
+  try {
+    body = await readBody(req);
+  } catch {
+    return jsonResponse(res, 400, { error: "Invalid JSON" });
+  }
+  const text = (body.text ?? "").toString();
+  if (text) {
+    pushSseEvent("assistant", { text }, body.sessionId || null);
+  }
+  jsonResponse(res, 200, { ok: true });
+}
+
+// ---------------------------------------------------------------------------
 // Router
 // ---------------------------------------------------------------------------
 
@@ -1411,6 +1491,8 @@ const routes = {
   "POST /pair": handlePair,
   "POST /command": handleCommand,
   "GET /events": handleEvents,
+  "GET /channel/inbox": handleChannelInbox,
+  "POST /channel/reply": handleChannelReply,
   "POST /hooks/tool-output": handleHookToolOutput,
   "POST /hooks/permission": handleHookPermission,
   "POST /hooks/stop": handleHookStop,

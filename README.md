@@ -2,11 +2,18 @@
   <img src="logo.png" width="140" alt="Claude Logo" />
 </p>
 
-<h1 align="center"><strong>Agent Watch</strong></h1>
+<h1 align="center"><strong>Claude Watch — Anywhere</strong></h1>
 
 <p align="center">
-  Control Claude Code from your Apple Watch.<br/>
+  Control Claude Code from your Apple Watch — from <em>any</em> network.<br/>
   See terminal output, approve permissions, and send voice commands — all from your wrist.
+</p>
+
+<p align="center">
+  A fork of <a href="https://github.com/shobhit99/claude-watch">claude-watch</a> that removes the
+  same-Wi-Fi requirement (public HTTPS tunnel) and adds Claude Code's official
+  <a href="https://code.claude.com/docs/en/channels-reference">Channels</a> integration for
+  sanctioned prompt injection. See <a href="AGENTS.md">AGENTS.md</a> for the design and dev handoff.
 </p>
 
 https://github.com/user-attachments/assets/5f478c28-2086-4696-9d76-e43dda853201
@@ -26,6 +33,9 @@ https://github.com/user-attachments/assets/5f478c28-2086-4696-9d76-e43dda853201
 
 ## What It Does
 
+- **Works from anywhere** — a cloudflared tunnel exposes the bridge over public HTTPS, so the watch no longer needs the same Wi-Fi / Bonjour (run with `./skill/bridge/run.sh`)
+- **Official Channels integration** — voice prompts are injected into the live session via a Claude Code [channel](https://code.claude.com/docs/en/channels-reference) MCP server, with replies sent back to your wrist (optional, `./skill/setup-channel.sh`)
+- **One-shot Mac build** — `./build.sh` installs deps, generates the Xcode project, and (optionally) builds
 - **Live terminal output** on your Apple Watch — see what Claude is doing in real-time
 - **Permission prompts** — approve or deny Claude's actions from your wrist (Edit file? Run command?)
 - **Dynamic questions** — answer `AskUserQuestion` prompts with all options displayed
@@ -92,6 +102,20 @@ To remove hooks later: `./skill/setup-hooks.sh --remove`
 
 ### 3. Start the bridge server
 
+**From anywhere (recommended)** — bridge + public HTTPS tunnel:
+
+```bash
+./skill/bridge/run.sh
+```
+
+This prints a 6-digit pairing code and an `https://…trycloudflare.com` URL. On
+the watch, tap into the manual field and paste that URL (no same-Wi-Fi needed).
+Requires `cloudflared` (`brew install cloudflared`). The quick-tunnel URL changes
+each run; for a stable hostname see [AGENTS.md](AGENTS.md). Use
+`./skill/bridge/run.sh --no-tunnel` for the original LAN/Bonjour behavior.
+
+**LAN only** — bridge alone:
+
 ```bash
 cd skill/bridge
 node server.js
@@ -109,6 +133,14 @@ You'll see:
 ```
 
 ### 4. Build the iOS + watchOS apps
+
+The quickest path (installs deps, generates the project, opens Xcode):
+
+```bash
+./build.sh --open
+```
+
+Or manually:
 
 ```bash
 cd ios/ClaudeWatch
@@ -228,6 +260,22 @@ The `setup-hooks.sh` script installs these HTTP hooks globally in `~/.claude/set
 | `PostToolUseFailure` | Capture errors | No (async) |
 | `StopFailure` | Capture API errors | No (async) |
 | `Notification` | Idle/permission notifications | No (async) |
+
+## Channels (optional — official prompt injection)
+
+Hooks are one-way (output + permission relay). To inject watch voice prompts into
+the **live** session via Claude Code's sanctioned [Channels](https://code.claude.com/docs/en/channels-reference)
+API (instead of spawning a one-shot `claude -p`), register the channel MCP server:
+
+```bash
+./skill/setup-channel.sh
+claude --dangerously-load-development-channels server:claudewatch
+```
+
+`channel.js` injects watch prompts as `<channel source="claudewatch">` events and
+exposes a `watch_reply` tool so Claude can message your wrist back. It bridges to
+`server.js` over localhost (`/channel/inbox`, `/channel/reply`). Remove with
+`./skill/setup-channel.sh --remove`. See [AGENTS.md](AGENTS.md) for the design.
 
 ## Configuration
 

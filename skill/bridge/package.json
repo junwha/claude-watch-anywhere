@@ -5,12 +5,14 @@
   "type": "module",
   "main": "server.js",
   "scripts": {
-    "start": "node server.js"
+    "start": "node server.js",
+    "channel": "node channel.js"
   },
   "engines": {
     "node": ">=18.0.0"
   },
   "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.0.0",
     "bonjour-service": "^1.3.0"
   }
 }

@@ -57,16 +57,16 @@ struct OnboardingView: View {
                 }
 
             } else {
-                // Not found — IP entry right away
-                Text("Enter Mac IP")
+                // Not found — manual entry: LAN IP or a public tunnel URL
+                Text("Enter IP or tunnel URL")
                     .font(.system(size: 11))
                     .foregroundColor(Theme.Text.secondary)
 
-                Text("Wi-Fi not required — routes via iPhone")
+                Text("LAN IP, or paste the https tunnel URL")
                     .font(.system(size: 9))
                     .foregroundColor(Theme.Text.dimmed)
 
-                TextField("192.168.1.x", text: $ipAddress)
+                TextField("192.168.1.x or xxx.trycloudflare.com", text: $ipAddress)
                     .font(.system(size: 16, weight: .bold, design: .monospaced))
                     .foregroundColor(Theme.Text.primary)
                     .multilineTextAlignment(.center)
@@ -106,32 +106,71 @@ struct OnboardingView: View {
     }
 
     private func connectManual() {
-        let ip = ipAddress.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !ip.isEmpty else { return }
+        let raw = ipAddress.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !raw.isEmpty else { return }
         isSearching = true
         error = nil
 
         Task {
-            for port in 7860...7869 {
-                let url = URL(string: "http://\(ip):\(port)/status")!
-                var request = URLRequest(url: url)
-                request.timeoutInterval = 3
-                do {
-                    let (_, response) = try await URLSession.shared.data(for: request)
-                    if let http = response as? HTTPURLResponse, http.statusCode == 200 {
-                        await MainActor.run {
-                            isSearching = false
-                            bridgeURL = URL(string: "http://\(ip):\(port)")
-                            codeFocused = true
-                        }
-                        return
+            // Full URL or DNS hostname (e.g. a cloudflared tunnel) → connect directly.
+            if let base = Self.directBaseURL(from: raw) {
+                if await Self.probe(base) {
+                    await MainActor.run {
+                        isSearching = false
+                        bridgeURL = base
+                        codeFocused = true
                     }
-                } catch { continue }
+                } else {
+                    await MainActor.run {
+                        isSearching = false
+                        self.error = "Can't reach \(base.host ?? raw)"
+                    }
+                }
+                return
+            }
+
+            // Bare IP → scan the LAN port range over http.
+            for port in 7860...7869 {
+                let base = URL(string: "http://\(raw):\(port)")!
+                if await Self.probe(base) {
+                    await MainActor.run {
+                        isSearching = false
+                        bridgeURL = base
+                        codeFocused = true
+                    }
+                    return
+                }
             }
             await MainActor.run {
                 isSearching = false
-                self.error = "Can't reach \(ip)"
+                self.error = "Can't reach \(raw)"
             }
+        }
+    }
+
+    /// A base URL when the input is a full URL or a DNS hostname (tunnel),
+    /// or nil when it's a bare IP that still needs a LAN port scan.
+    private static func directBaseURL(from raw: String) -> URL? {
+        if raw.hasPrefix("http://") || raw.hasPrefix("https://") {
+            let trimmed = raw.hasSuffix("/") ? String(raw.dropLast()) : raw
+            return URL(string: trimmed)
+        }
+        // Hostnames contain letters; bare IPv4 addresses are digits and dots only.
+        if raw.contains(where: { $0.isLetter }) {
+            return URL(string: "https://\(raw)")
+        }
+        return nil
+    }
+
+    /// True when `<base>/status` answers 200.
+    private static func probe(_ base: URL) async -> Bool {
+        var request = URLRequest(url: base.appendingPathComponent("status"))
+        request.timeoutInterval = 4
+        do {
+            let (_, response) = try await URLSession.shared.data(for: request)
+            return (response as? HTTPURLResponse)?.statusCode == 200
+        } catch {
+            return false
         }
     }
 
