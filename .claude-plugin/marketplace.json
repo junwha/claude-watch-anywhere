@@ -1,0 +1,12 @@
+{
+  "name": "claude-watch",
+  "owner": { "name": "junwha" },
+  "plugins": [
+    {
+      "name": "claude-watch-anywhere",
+      "source": "./",
+      "description": "Control Claude Code from your Apple Watch, from any network.",
+      "version": "1.0.0"
+    }
+  ]
+}

@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "claudewatch": {
+      "command": "node",
+      "args": ["${CLAUDE_PLUGIN_ROOT}/skill/bridge/channel.js"],
+      "env": { "CLAUDE_WATCH_BRIDGE": "http://127.0.0.1:7860" }
+    }
+  }
+}

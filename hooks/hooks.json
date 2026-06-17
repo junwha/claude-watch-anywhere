@@ -1,0 +1,25 @@
+{
+  "hooks": {
+    "PostToolUse": [
+      { "hooks": [{ "type": "http", "url": "http://127.0.0.1:7860/hooks/tool-output", "timeout": 5 }] }
+    ],
+    "PreToolUse": [
+      { "hooks": [{ "type": "http", "url": "http://127.0.0.1:7860/hooks/tool-output", "timeout": 5 }] }
+    ],
+    "PermissionRequest": [
+      { "hooks": [{ "type": "http", "url": "http://127.0.0.1:7860/hooks/permission", "timeout": 600 }] }
+    ],
+    "Stop": [
+      { "hooks": [{ "type": "http", "url": "http://127.0.0.1:7860/hooks/stop", "timeout": 5 }] }
+    ],
+    "PostToolUseFailure": [
+      { "hooks": [{ "type": "http", "url": "http://127.0.0.1:7860/hooks/error", "timeout": 5 }] }
+    ],
+    "StopFailure": [
+      { "hooks": [{ "type": "http", "url": "http://127.0.0.1:7860/hooks/error", "timeout": 5 }] }
+    ],
+    "Notification": [
+      { "matcher": "idle_prompt|permission_prompt", "hooks": [{ "type": "http", "url": "http://127.0.0.1:7860/hooks/stop", "timeout": 5 }] }
+    ]
+  }
+}

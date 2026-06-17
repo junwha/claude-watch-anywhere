@@ -1,5 +1,8 @@
 **/node_modules/
 
+# Bridge secrets (relay URL/secret)
+skill/bridge/.env
+
 # Build outputs
 **/build/
 **/DerivedData/

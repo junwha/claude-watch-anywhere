@@ -1,31 +1,33 @@
 #!/usr/bin/env bash
-# claude-watch-anywhere — one-shot Mac setup + build.
+# claude-watch-anywhere — build the WATCH APP end to end (run on a Mac).
 #
-# After cloning the repo, run this on a Mac to get from zero to a buildable
-# Xcode project and a ready-to-run bridge.
+# One command takes a fresh clone to an installable watch app. It only stops for
+# things that genuinely need you: `wrangler login` (browser) and Apple signing.
 #
-#   ./build.sh                 # install deps + generate Xcode project
-#   ./build.sh --open          # ...and open the project in Xcode
-#   DEVELOPMENT_TEAM=ABCDE12345 ./build.sh --archive   # ...and try a CLI build
+#   ./build.sh                     # toolchain + relay deploy + inject URL + xcodegen + open Xcode
+#   ./build.sh --archive           # ...and also do a CLI build (needs DEVELOPMENT_TEAM or simulator)
+#   ./build.sh --no-relay          # skip the Cloudflare relay step (LAN/manual pairing only)
+#   RELAY_URL=https://x.workers.dev ./build.sh   # reuse an already-deployed relay (no wrangler)
 #
-# Requirements (auto-checked, installed via Homebrew when missing):
-#   node >=18, xcodegen, cloudflared, Xcode (+ command line tools)
+# NOTE: installing the Claude Code PLUGIN is a SEPARATE step — see ./install.sh.
+# It runs on whatever machine you run Claude on (which may not be this Mac).
 
 set -euo pipefail
-
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-BRIDGE_DIR="$ROOT/skill/bridge"
+BRIDGE="$ROOT/skill/bridge"
+RELAY_DIR="$ROOT/relay"
 IOS_DIR="$ROOT/ios/ClaudeWatch"
+PROJ="$IOS_DIR/ClaudeWatch.xcodeproj"
+SWIFT_CLIENT="$IOS_DIR/ClaudeWatch watchOS/Services/WatchBridgeClient.swift"
 
-OPEN=0
-ARCHIVE=0
-for arg in "$@"; do
-  case "$arg" in
-    --open) OPEN=1 ;;
-    --archive|--build) ARCHIVE=1 ;;
-    -h|--help)
-      sed -n '2,13p' "$ROOT/build.sh"; exit 0 ;;
-    *) echo "Unknown flag: $arg" >&2; exit 1 ;;
+DO_RELAY=1; DO_OPEN=1; DO_ARCHIVE=0
+for a in "$@"; do
+  case "$a" in
+    --no-relay) DO_RELAY=0 ;;
+    --no-open)  DO_OPEN=0 ;;
+    --archive|--build) DO_ARCHIVE=1 ;;
+    -h|--help) sed -n '2,18p' "$0"; exit 0 ;;
+    *) echo "Unknown flag: $a" >&2; exit 1 ;;
   esac
 done
 
@@ -33,87 +35,117 @@ say()  { printf '\033[1;36m==>\033[0m %s\n' "$*"; }
 warn() { printf '\033[1;33m!!\033[0m %s\n' "$*"; }
 die()  { printf '\033[1;31mxx\033[0m %s\n' "$*" >&2; exit 1; }
 
-[ "$(uname -s)" = "Darwin" ] || die "build.sh targets macOS. (The bridge alone runs anywhere: 'cd skill/bridge && npm install && node server.js'.)"
+[ "$(uname -s)" = "Darwin" ] || die "build.sh builds the watch app and needs macOS + Xcode."
 
 # ---------------------------------------------------------------------------
 # 1. Toolchain
 # ---------------------------------------------------------------------------
-say "Checking toolchain"
+say "Phase 1/5 — toolchain"
+ensure() { # ensure <cmd> <brew-formula>
+  command -v "$1" >/dev/null 2>&1 && return 0
+  command -v brew >/dev/null 2>&1 || die "$1 missing and Homebrew not installed (https://brew.sh)."
+  say "Installing $2"; brew install "$2"
+}
+ensure node node
+[ "$(node -p 'process.versions.node.split(".")[0]')" -ge 18 ] || die "Node >=18 required."
+ensure xcodegen xcodegen
+command -v xcodebuild >/dev/null 2>&1 || die "Xcode not installed (App Store)."
+[ "$DO_RELAY" = 1 ] && ensure wrangler wrangler || true
 
-if ! command -v brew >/dev/null 2>&1; then
-  warn "Homebrew not found. Install from https://brew.sh, then re-run."
-  warn "Continuing — will fail later if a required tool is missing."
+# ---------------------------------------------------------------------------
+# 2. Bridge deps
+# ---------------------------------------------------------------------------
+say "Phase 2/5 — bridge dependencies"
+( cd "$BRIDGE" && npm install )
+
+# ---------------------------------------------------------------------------
+# 3. Relay deploy (Cloudflare Worker) -> RELAY_URL
+# ---------------------------------------------------------------------------
+RELAY_SECRET=""
+if [ "$DO_RELAY" = 1 ] && [ -z "${RELAY_URL:-}" ]; then
+  say "Phase 3/5 — deploying the rendezvous relay (Cloudflare)"
+  ( cd "$RELAY_DIR" && npm install >/dev/null 2>&1 || true )
+
+  warn "A browser will open for 'wrangler login' if you're not logged in."
+  ( cd "$RELAY_DIR" && wrangler whoami >/dev/null 2>&1 || wrangler login )
+
+  # KV namespace (only if not yet wired into wrangler.toml)
+  if grep -q "REPLACE_WITH_YOUR_KV_NAMESPACE_ID" "$RELAY_DIR/wrangler.toml"; then
+    say "Creating KV namespace PAIRINGS"
+    KV_OUT="$(cd "$RELAY_DIR" && wrangler kv namespace create PAIRINGS 2>&1)" || { echo "$KV_OUT"; die "KV create failed"; }
+    KV_ID="$(printf '%s' "$KV_OUT" | grep -oE '[0-9a-f]{32}' | head -1)"
+    [ -n "$KV_ID" ] || { echo "$KV_OUT"; die "Could not parse KV id — paste it into relay/wrangler.toml manually."; }
+    sed -i '' "s/REPLACE_WITH_YOUR_KV_NAMESPACE_ID/$KV_ID/" "$RELAY_DIR/wrangler.toml"
+    say "KV id wired: $KV_ID"
+  fi
+
+  # Shared secret (auto-generated, stored to bridge .env)
+  RELAY_SECRET="$(openssl rand -hex 16)"
+  say "Setting RELAY_SECRET"
+  ( cd "$RELAY_DIR" && printf '%s' "$RELAY_SECRET" | wrangler secret put RELAY_SECRET >/dev/null )
+
+  say "Deploying Worker"
+  DEPLOY_OUT="$(cd "$RELAY_DIR" && wrangler deploy 2>&1)" || { echo "$DEPLOY_OUT"; die "wrangler deploy failed"; }
+  RELAY_URL="$(printf '%s' "$DEPLOY_OUT" | grep -oE 'https://[a-z0-9.-]+\.workers\.dev' | head -1)"
+  [ -n "$RELAY_URL" ] || { echo "$DEPLOY_OUT"; die "Could not parse the Worker URL from wrangler output."; }
+  say "Relay live: $RELAY_URL"
+
+  # Persist for the bridge (so 'node server.js' here is configured)
+  {
+    echo "CLAUDE_WATCH_RELAY=$RELAY_URL"
+    echo "CLAUDE_WATCH_RELAY_SECRET=$RELAY_SECRET"
+    echo "CLAUDE_WATCH_TUNNEL=1"
+  } > "$BRIDGE/.env"
+  say "Wrote $BRIDGE/.env"
+elif [ "$DO_RELAY" = 0 ]; then
+  say "Phase 3/5 — skipped (--no-relay): watch will pair via LAN/manual only"
+else
+  say "Phase 3/5 — using provided RELAY_URL=$RELAY_URL"
 fi
 
-ensure() {  # ensure <command> <brew-formula>
-  local cmd="$1" formula="$2"
-  if command -v "$cmd" >/dev/null 2>&1; then return 0; fi
-  if command -v brew >/dev/null 2>&1; then
-    say "Installing $formula via Homebrew"
-    brew install "$formula"
-  else
-    die "$cmd not found and Homebrew unavailable. Install $formula manually."
-  fi
-}
-
-command -v node >/dev/null 2>&1 || ensure node node
-node_major="$(node -p 'process.versions.node.split(".")[0]' 2>/dev/null || echo 0)"
-[ "$node_major" -ge 18 ] || die "Node >=18 required (found $(node -v 2>/dev/null || echo none))."
-ensure xcodegen xcodegen
-ensure cloudflared cloudflared      # used by skill/bridge/run.sh for the tunnel
-
-command -v xcodebuild >/dev/null 2>&1 || warn "Xcode not detected. Install Xcode from the App Store for iOS/watchOS builds."
+# ---------------------------------------------------------------------------
+# 4. Inject the relay URL into the watch app
+# ---------------------------------------------------------------------------
+say "Phase 4/5 — injecting relay URL into the watch app"
+if [ -n "${RELAY_URL:-}" ]; then
+  [ -f "$SWIFT_CLIENT" ] || die "Missing $SWIFT_CLIENT"
+  # Replace the relayURLString literal (idempotent: matches any current value)
+  sed -i '' -E "s#(static let relayURLString = )\"[^\"]*\"#\\1\"$RELAY_URL\"#" "$SWIFT_CLIENT"
+  grep -q "relayURLString = \"$RELAY_URL\"" "$SWIFT_CLIENT" || die "Failed to inject relay URL into Swift."
+  say "relayURLString set to $RELAY_URL"
+else
+  warn "No relay URL — leaving relayURLString empty (LAN/manual pairing only)."
+fi
 
 # ---------------------------------------------------------------------------
-# 2. Bridge dependencies
+# 5. Xcode project + build
 # ---------------------------------------------------------------------------
-say "Installing bridge dependencies (skill/bridge)"
-( cd "$BRIDGE_DIR" && npm install )
-
-# ---------------------------------------------------------------------------
-# 3. Generate the Xcode project
-# ---------------------------------------------------------------------------
-say "Generating Xcode project (xcodegen)"
+say "Phase 5/5 — generating Xcode project"
 ( cd "$IOS_DIR" && xcodegen generate )
-PROJ="$IOS_DIR/ClaudeWatch.xcodeproj"
 [ -d "$PROJ" ] || die "xcodegen did not produce $PROJ"
 
-# ---------------------------------------------------------------------------
-# 4. Optional CLI build
-# ---------------------------------------------------------------------------
-if [ "$ARCHIVE" = "1" ]; then
-  command -v xcodebuild >/dev/null 2>&1 || die "xcodebuild unavailable; cannot --archive."
-  if [ -z "${DEVELOPMENT_TEAM:-}" ]; then
-    warn "DEVELOPMENT_TEAM not set — a device build needs signing. Building for the simulator instead."
-    say "Building ClaudeWatch (iOS Simulator)"
-    xcodebuild -project "$PROJ" -scheme ClaudeWatch \
-      -destination 'generic/platform=iOS Simulator' \
-      -configuration Debug build CODE_SIGNING_ALLOWED=NO
-  else
-    say "Building ClaudeWatch for device (team $DEVELOPMENT_TEAM)"
-    xcodebuild -project "$PROJ" -scheme ClaudeWatch \
-      -destination 'generic/platform=iOS' \
+if [ "$DO_ARCHIVE" = 1 ]; then
+  if [ -n "${DEVELOPMENT_TEAM:-}" ]; then
+    say "Building for device (team $DEVELOPMENT_TEAM)"
+    xcodebuild -project "$PROJ" -scheme ClaudeWatch -destination 'generic/platform=iOS' \
       -configuration Debug build DEVELOPMENT_TEAM="$DEVELOPMENT_TEAM"
+  else
+    warn "DEVELOPMENT_TEAM not set — building for the simulator (no signing)."
+    xcodebuild -project "$PROJ" -scheme ClaudeWatch -destination 'generic/platform=iOS Simulator' \
+      -configuration Debug build CODE_SIGNING_ALLOWED=NO
   fi
 fi
 
-# ---------------------------------------------------------------------------
-# 5. Done
-# ---------------------------------------------------------------------------
 cat <<EOF
 
-$(say "Setup complete.")
+$(say "Watch app ready.")
+  Relay URL : ${RELAY_URL:-<none — LAN/manual only>}
+$( [ -n "$RELAY_SECRET" ] && echo "  Relay secret (for the bridge .env on other machines): $RELAY_SECRET" )
 
 Next:
-  1. Start the bridge + tunnel:   ./skill/bridge/run.sh
-     (prints a 6-digit pairing code and a public https URL for the watch)
-  2. Install Claude Code hooks:   ./skill/setup-hooks.sh
-  3. In Xcode: set your Development Team on both targets, then Run.
-     Open it now with:            ./build.sh --open
-
+  • In Xcode: set your Development Team on BOTH targets, pick your watch, Run.
+  • Install the Claude plugin on the machine you run Claude on:  ./install.sh
+  • Start the bridge + pair:  inside Claude run  /claude-watch-anywhere:claude-watch
 EOF
 
-if [ "$OPEN" = "1" ]; then
-  say "Opening Xcode"
-  open "$PROJ"
-fi
+[ "$DO_OPEN" = 1 ] && { say "Opening Xcode"; open "$PROJ"; }

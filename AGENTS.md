@@ -63,26 +63,45 @@ Nothing in the iOS/watchOS app was compiled. The Swift change is small and
 self-contained (see `connectManual` + new `directBaseURL`/`probe` helpers) but
 **verify it builds first.**
 
-## Build & run on the Mac
+## Entry points: build.sh vs install.sh (two separate machines)
 
-```bash
-# 0. clone, then:
-./build.sh --open            # installs deps, generates ClaudeWatch.xcodeproj, opens Xcode
-# In Xcode: set Development Team on BOTH targets (ClaudeWatch + ClaudeWatchWatch), Run.
+The watch app and the Claude-side plugin are **decoupled** on purpose.
 
-# 1. bridge + tunnel (anywhere access)
-./skill/bridge/run.sh        # prints a 6-digit pairing code AND an https://...trycloudflare.com URL
+- **`./build.sh`** — run on a **Mac** (needs Xcode). One command: toolchain →
+  deploy the Cloudflare relay (`wrangler login` is the only stop) → inject the
+  relay `*.workers.dev` URL into `WatchBridgeClient.relayURLString` → `xcodegen`
+  → open/▶ Xcode. Stops only for `wrangler login` and Apple signing.
+  `--no-relay` skips the relay; `RELAY_URL=… ./build.sh` reuses one.
+- **`./install.sh`** — run on **whatever machine runs Claude Code** (may be
+  Windows/Linux, not the Mac). Installs the plugin (`claude plugin marketplace
+  add . && claude plugin install claude-watch-anywhere@claude-watch`), scaffolds
+  `skill/bridge/.env`, and adds a `cw` shell alias (`--alias-claude` to override
+  plain `claude`, `--no-alias` to skip).
 
-# 2. hooks (output + permission relay)
-./skill/setup-hooks.sh
+Why separate: building the watch app has nothing to do with installing the
+plugin, and they usually run on different machines.
 
-# 3. (optional, Stage 2) channels
-./skill/setup-channel.sh
-claude --dangerously-load-development-channels server:claudewatch
-```
+## The plugin (global, not project-dependent)
 
-On the watch: when auto-discovery fails, tap into the manual field and paste the
-**tunnel URL** (or a LAN IP), then enter the pairing code.
+Repo root **is** the plugin and a one-plugin marketplace:
+- `.claude-plugin/plugin.json` + `.claude-plugin/marketplace.json`
+- `hooks/hooks.json` — the http hooks (output + permission relay), now global via
+  the plugin instead of `setup-hooks.sh`.
+- `.mcp.json` — registers the channel (`${CLAUDE_PLUGIN_ROOT}/skill/bridge/channel.js`).
+- `skills/claude-watch/SKILL.md` — `/claude-watch-anywhere:claude-watch` starts the bridge + prints the code.
+
+**Channel caveat (unchanged by plugin):** prompt-injection still needs the
+research-preview launch flag, so the session must start via the `cw` alias =
+`claude --dangerously-load-development-channels plugin:claude-watch-anywhere@claude-watch`.
+Output/pairing work without it.
+
+**Verified here:** all JSON valid, bash `-n` clean. **NOT verified:** actual
+`claude plugin install` / plugin load / hooks firing / channel-as-plugin — needs
+a real Claude Code on the target machine. The old `setup-hooks.sh` /
+`setup-channel.sh` / `run.sh` still work for non-plugin/manual use.
+
+On the watch: enter just the 6-digit code (relay resolves the URL). If no relay,
+tap "Enter URL manually" for a LAN IP / tunnel URL.
 
 ## Debug checklist (most-likely-broken first)
 

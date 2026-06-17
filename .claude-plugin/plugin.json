@@ -1,0 +1,7 @@
+{
+  "name": "claude-watch-anywhere",
+  "description": "Control Claude Code from your Apple Watch, from any network. Bundles the bridge hooks (live output + permission relay) and the watch channel (prompt injection into the live session).",
+  "version": "1.0.0",
+  "author": { "name": "junwha" },
+  "homepage": "https://github.com/junwha/claude-watch-anywhere"
+}
