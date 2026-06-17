@@ -91,6 +91,12 @@ often only appears after Xcode has tried an install **and** the device restarts.
    **Developer Mode → On** (it asks to restart again). Requires watchOS 9+.
 4. Still missing? Run ▶ from Xcode again — a "Developer Mode required" prompt
    appears, after which the toggle shows up.
+5. **Trick that works when it's truly absent:** the toggle only appears once Xcode
+   actually *connects* to the watch. Force it: Xcode → Window → Devices and
+   Simulators (or the macOS **Console** app) → **open the live console for the
+   iPhone, then for the Apple Watch**. That handshake makes **Developer Mode**
+   appear in the watch's Privacy & Security. (Needs iPhone on USB to the Mac, and
+   Mac/iPhone/watch on the same Wi-Fi SSID + Bluetooth on.)
 
 If the watch shows an **endless "Installing…" spinner**: cancel it (iPhone Watch
 app → the app → turn its install toggle off), enable Developer Mode as above,
