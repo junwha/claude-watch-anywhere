@@ -108,13 +108,6 @@ new_hooks = {
             'timeout': 600
         }]
     }],
-    'Stop': [{
-        'hooks': [{
-            'type': 'http',
-            'url': f'{BRIDGE}/hooks/stop',
-            'timeout': 5
-        }]
-    }],
     'PostToolUseFailure': [{
         'hooks': [{
             'type': 'http',
@@ -126,14 +119,6 @@ new_hooks = {
         'hooks': [{
             'type': 'http',
             'url': f'{BRIDGE}/hooks/error',
-            'timeout': 5
-        }]
-    }],
-    'Notification': [{
-        'matcher': 'idle_prompt|permission_prompt',
-        'hooks': [{
-            'type': 'http',
-            'url': f'{BRIDGE}/hooks/stop',
             'timeout': 5
         }]
     }]
