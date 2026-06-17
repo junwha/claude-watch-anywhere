@@ -70,8 +70,9 @@ Usually it auto-installs within a minute. If not:
 3. On the watch, the app appears in the app grid.
 
 ## Step 7 — Open and pair
-Open **Agent Watch** on the watch and **type the 6-digit code** the bridge
-printed (`/claude-watch-anywhere:claude-watch`, or `node skill/bridge/server.js`).
+Open **Agent Watch** on the watch and **type the 6-digit code**. The bridge
+auto-starts when you start a Claude session via the `cw` alias and the session
+announces the code (or start it manually: `node skill/bridge/server.js`).
 With a relay configured, the code is all you need. No relay? Tap **Enter URL
 manually** and enter the LAN IP / tunnel URL, then the code.
 

@@ -1,0 +1,7 @@
+[
+  {
+    "name": "claude-watch-bridge",
+    "command": "node \"${CLAUDE_PLUGIN_ROOT}/skill/bridge/server.js\"",
+    "description": "Claude Watch bridge. Claude Code starts it automatically when this plugin is active; the 6-digit pairing code appears in its output — relay it to the user so they can enter it on the watch. Reads config from skill/bridge/.env (quiet + single-instance)."
+  }
+]

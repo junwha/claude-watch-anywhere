@@ -6,13 +6,33 @@ import path from "node:path";
 import { execSync } from "node:child_process";
 import { spawn as childSpawn } from "node:child_process";
 import { Bonjour } from "bonjour-service";
+import { fileURLToPath } from "node:url";
 import { initRelay } from "./relay.js";
+
+// Load skill/bridge/.env (KEY=VALUE) into process.env without overriding the
+// real environment. Lets `node server.js` self-configure (relay, tunnel, quiet,
+// single) no matter how it's launched — monitor, manual terminal, etc.
+(() => {
+  try {
+    const envPath = path.join(path.dirname(fileURLToPath(import.meta.url)), ".env");
+    for (const line of fs.readFileSync(envPath, "utf8").split("\n")) {
+      const m = line.match(/^\s*([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*?)\s*$/);
+      if (m && process.env[m[1]] === undefined) {
+        process.env[m[1]] = m[2].replace(/^["']|["']$/g, "");
+      }
+    }
+  } catch { /* no .env is fine */ }
+})();
 
 // ---------------------------------------------------------------------------
 // Logging (must be defined before use)
 // ---------------------------------------------------------------------------
 
+const QUIET = process.env.CLAUDE_WATCH_QUIET === "1";   // suppress per-event info logs
+const SINGLE = process.env.CLAUDE_WATCH_SINGLE === "1"; // exit if a bridge is already on 7860
+
 function log(level, msg, ...args) {
+  if (QUIET && level === "info") return;
   const ts = new Date().toISOString();
   const prefix = `[${ts}] [${level.toUpperCase()}]`;
   if (args.length) {
@@ -1548,6 +1568,10 @@ async function startServer() {
       break;
     } catch (err) {
       if (err.code === "EADDRINUSE") {
+        if (SINGLE) {
+          console.log(`Claude Watch bridge already running on port ${port}; this instance exits.`);
+          process.exit(0);
+        }
         log("warn", `Port ${port} in use, trying next...`);
         continue;
       }

@@ -172,7 +172,7 @@ $( [ -n "$RELAY_SECRET" ] && echo "  Relay secret (for the bridge .env on other 
   7. Open it on the watch and type the 6-digit pairing code.
 
   Then, on the machine you run Claude:  ./install.sh
-  Start the bridge + get the code:      inside Claude run /claude-watch-anywhere:claude-watch
+  Start a session with 'cw' — the bridge auto-starts and announces the pairing code.
   Stuck? See WATCH_INSTALL.md (signing errors, "won't appear on watch", 7-day free-account note).
 EOF
 

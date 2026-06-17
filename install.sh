@@ -81,12 +81,11 @@ cat <<EOF
 $(say "Plugin installed.")
 
 Use it:
-  1. Start the bridge:  inside Claude run  /claude-watch-anywhere:claude-watch
-     (or:  node skill/bridge/server.js)
-  2. Enter the 6-digit code on the watch.
-  3. To drive the session FROM the watch, start sessions with the channel:
+  1. Open a NEW shell (so the alias loads), then start a session:
        $([ "$ALIAS_MODE" = claude ] && echo 'claude' || echo 'cw')      # = $ALIAS_CMD
-     (open a new shell first so the alias loads)
+  2. The plugin's background monitor auto-starts the bridge and the session
+     announces a 6-digit PAIRING CODE. (No skill, no manual command.)
+  3. Enter that code on the watch. Done.
 
 Relay (anywhere + digits-only): fill skill/bridge/.env, deploy relay/ via build.sh.
 EOF

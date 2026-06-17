@@ -88,7 +88,15 @@ Repo root **is** the plugin and a one-plugin marketplace:
 - `hooks/hooks.json` — the http hooks (output + permission relay), now global via
   the plugin instead of `setup-hooks.sh`.
 - `.mcp.json` — registers the channel (`${CLAUDE_PLUGIN_ROOT}/skill/bridge/channel.js`).
-- `skills/claude-watch/SKILL.md` — `/claude-watch-anywhere:claude-watch` starts the bridge + prints the code.
+- `monitors/monitors.json` → Claude Code auto-runs `node skill/bridge/server.js`
+  in the background when the plugin is active; the bridge banner (pairing code)
+  streams to Claude as a notification to relay. Deterministic — no skill / no
+  model reasoning, and no detached-process hacks. (The earlier `skills/claude-watch`
+  SKILL.md and a `launch.js`/SessionStart approach were removed for this.)
+- `skill/bridge/server.js` self-loads `skill/bridge/.env` and honors
+  `CLAUDE_WATCH_QUIET=1` (only the pairing line + warnings) and
+  `CLAUDE_WATCH_SINGLE=1` (exit if a bridge is already on 7860) so the monitor is
+  quiet and idempotent across sessions.
 
 **Channel caveat (unchanged by plugin):** prompt-injection still needs the
 research-preview launch flag, so the session must start via the `cw` alias =
