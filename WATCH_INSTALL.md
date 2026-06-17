@@ -13,6 +13,18 @@ watch app to your paired Apple Watch. Follow these steps exactly.
 Connect the iPhone to the Mac. Unlock it. If it asks **"Trust This Computer?"**,
 tap **Trust** and enter your passcode.
 
+### Want it cable-free? (wireless deploy)
+You only need the cable **once**. After Step 1, in Xcode open **Window → Devices
+and Simulators**, select your iPhone, and tick **Connect via network**. Unplug —
+now, whenever the Mac and iPhone are on the **same Wi-Fi** (both awake), the
+iPhone shows up as a wireless run destination and ▶ deploys over the air.
+
+If the Mac isn't near you at all, the only way to install remotely is
+**TestFlight**, which needs a **paid Apple Developer account ($99/yr)**: upload a
+build from the Mac (or a cloud Mac / CI) once, then install via the TestFlight
+app on the iPhone from anywhere. Building still requires a Mac somewhere — Apple
+does not allow building/signing iOS apps from the phone alone.
+
 ## Step 2 — Set the signing team (one time)
 In Xcode's left sidebar, click the blue **ClaudeWatch** project at the top, then:
 
