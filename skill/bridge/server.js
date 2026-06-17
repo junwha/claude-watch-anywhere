@@ -6,6 +6,7 @@ import path from "node:path";
 import { execSync } from "node:child_process";
 import { spawn as childSpawn } from "node:child_process";
 import { Bonjour } from "bonjour-service";
+import { initRelay } from "./relay.js";
 
 // ---------------------------------------------------------------------------
 // Logging (must be defined before use)
@@ -82,6 +83,8 @@ const BRIDGE_ID = crypto.randomUUID();
 let sessionToken = null;
 let pairingCode = null;
 let pairingCodeExpiresAt = 0;
+let relayHandle = null; // set by initRelay() when tunnel/relay is enabled
+let onPairingCodeChange = null; // notified when the pairing code (re)generates
 
 // Rate limiting
 let rateLimitAttempts = 0;
@@ -144,6 +147,7 @@ function generatePairingCode() {
   pairingCode = code;
   pairingCodeExpiresAt = Date.now() + PAIRING_CODE_TTL_MS;
   log("info", `Pairing code generated: ${code} (expires in 5 minutes)`);
+  if (onPairingCodeChange) onPairingCodeChange(code);
   return code;
 }
 
@@ -1608,6 +1612,26 @@ async function startServer() {
   console.log("╚═══════════════════════════════════════╝");
   console.log("");
 
+  // --- Optional: public tunnel + rendezvous relay (digits-only pairing) ---
+  try {
+    relayHandle = await initRelay({ port: boundPort, log });
+    if (relayHandle) {
+      onPairingCodeChange = (c) => relayHandle.register(c);
+      await relayHandle.register(code); // register the current code now
+      if (relayHandle.publicUrl) {
+        console.log(`  Public URL:    ${relayHandle.publicUrl}`);
+      }
+      if (relayHandle.hasRelay) {
+        console.log(`  Pair anywhere: enter code ${code} on the watch (no URL needed)`);
+      } else {
+        console.log(`  On the watch:  paste the Public URL above, then enter ${code}`);
+      }
+      console.log("");
+    }
+  } catch (err) {
+    log("warn", `Tunnel/relay init failed: ${err.message} — continuing LAN-only`);
+  }
+
   // --- Graceful shutdown ---
 
   let shuttingDown = false;
@@ -1631,6 +1655,10 @@ async function startServer() {
     }
     sessions.clear();
     stopCodexMonitor();
+
+    if (relayHandle) {
+      try { relayHandle.stop(); } catch { /* ignore */ }
+    }
 
     if (bonjourService) {
       try { bonjourInstance.unpublishAll(); } catch { /* ignore */ }

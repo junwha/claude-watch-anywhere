@@ -1,0 +1,12 @@
+name = "claude-watch-relay"
+main = "src/worker.js"
+compatibility_date = "2024-11-01"
+
+# Create the KV namespace and paste its id here:
+#   npx wrangler kv namespace create PAIRINGS
+kv_namespaces = [
+  { binding = "PAIRINGS", id = "REPLACE_WITH_YOUR_KV_NAMESPACE_ID" }
+]
+
+# Shared secret the bridge uses to /register (optional but recommended):
+#   npx wrangler secret put RELAY_SECRET

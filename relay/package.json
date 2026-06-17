@@ -1,0 +1,12 @@
+{
+  "name": "claude-watch-relay",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Rendezvous relay (Cloudflare Worker) for digits-only watch pairing",
+  "scripts": {
+    "deploy": "wrangler deploy",
+    "dev": "wrangler dev",
+    "test": "node test.mjs"
+  }
+}

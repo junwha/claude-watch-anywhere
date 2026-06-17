@@ -114,6 +114,11 @@ Requires `cloudflared` (`brew install cloudflared`). The quick-tunnel URL change
 each run; for a stable hostname see [AGENTS.md](AGENTS.md). Use
 `./skill/bridge/run.sh --no-tunnel` for the original LAN/Bonjour behavior.
 
+**Anywhere + digits-only** — deploy the free [relay](relay/) Worker once, set
+`CLAUDE_WATCH_RELAY` / `CLAUDE_WATCH_RELAY_SECRET` / `CLAUDE_WATCH_TUNNEL=1`, and
+the watch pairs from any network by typing only the 6-digit code (no URL). See
+[relay/README.md](relay/README.md).
+
 **LAN only** — bridge alone:
 
 ```bash

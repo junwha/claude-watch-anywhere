@@ -5,6 +5,14 @@ import Foundation
 class WatchBridgeClient: ObservableObject {
     static let shared = WatchBridgeClient()
 
+    /// Rendezvous relay for digits-only pairing from any network.
+    /// Set this to your deployed Cloudflare Worker URL (see relay/README.md).
+    /// Leave empty to disable relay pairing (LAN/Bonjour + manual URL only).
+    static let relayURLString = ""  // e.g. "https://claude-watch-relay.you.workers.dev"
+    static var relayURL: URL? {
+        relayURLString.isEmpty ? nil : URL(string: relayURLString)
+    }
+
     @Published var baseURL: URL?
     @Published var token: String?
 
@@ -59,6 +67,24 @@ class WatchBridgeClient: ObservableObject {
             } catch { continue }
         }
         return nil
+    }
+
+    /// Resolve a 6-digit code to the bridge's current public URL via the relay.
+    /// Returns nil when no relay is configured.
+    func resolve(code: String) async throws -> URL? {
+        guard let relay = Self.relayURL else { return nil }
+        var request = URLRequest(url: relay.appendingPathComponent("resolve"))
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = try JSONEncoder().encode(["code": code])
+
+        let (data, response) = try await session.data(for: request)
+        guard let http = response as? HTTPURLResponse else { throw BridgeError.network }
+        if http.statusCode == 429 { throw BridgeError.rateLimited }
+        guard http.statusCode == 200 else { throw BridgeError.invalidCode }
+        let result = try JSONDecoder().decode(ResolveResponse.self, from: data)
+        guard let url = URL(string: result.url) else { throw BridgeError.network }
+        return url
     }
 
     /// Pair with bridge using 6-digit code
@@ -120,6 +146,10 @@ class WatchBridgeClient: ObservableObject {
     struct PairResponse: Decodable {
         let token: String
         let sessionId: String
+    }
+
+    struct ResolveResponse: Decodable {
+        let url: String
     }
 
     struct BridgeStatus: Decodable {

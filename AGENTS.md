@@ -106,6 +106,35 @@ On the watch: when auto-discovery fails, tap into the manual field and paste the
    `Server`/notification API differs, channel.js needs adjusting to the installed
    version. `cd skill/bridge && npm ls @modelcontextprotocol/sdk`.
 
+## Digits-only pairing (relay)
+
+So the watch can pair from ANY network by typing only the 6-digit code (no URL),
+there's a free Cloudflare Worker rendezvous relay in `relay/`.
+
+Flow: bridge registers `code -> current tunnel URL` with the relay; watch sends
+the code to the relay (its URL is baked into the app, fixed forever) and gets the
+tunnel URL back, then pairs normally. The session token never touches the relay.
+
+- `relay/src/worker.js` — Worker. `/register` (bridge, secret-gated), `/resolve`
+  (watch, rate-limited), `/health`. **Verified**: `cd relay && npm test` → 8/8.
+- `skill/bridge/relay.js` — bridge side: spawns cloudflared (or uses
+  `CLAUDE_WATCH_TUNNEL_URL`) and registers the code. **Verified** end-to-end
+  against a fake relay (registers `{code,url}` + `Bearer` auth). cloudflared spawn
+  itself is syntax-checked only.
+- `WatchBridgeClient.resolve(code:)` + digits-first `OnboardingView` — **NOT
+  compiled** (no Xcode).
+
+**To enable (after deploying the Worker — see `relay/README.md`):**
+1. Deploy: `cd relay && wrangler kv namespace create PAIRINGS` (paste id into
+   `wrangler.toml`), `wrangler secret put RELAY_SECRET`, `wrangler deploy`.
+2. Bridge env (Windows): `CLAUDE_WATCH_RELAY`, `CLAUDE_WATCH_RELAY_SECRET`,
+   `CLAUDE_WATCH_TUNNEL=1`, then `node server.js`.
+3. Watch: set `WatchBridgeClient.relayURLString` to your `*.workers.dev` URL,
+   rebuild. (Empty string = relay disabled, LAN/manual only.)
+
+Without any of this, pairing still works on LAN (Bonjour, digits-only) and via
+manual URL entry — the relay is purely the "anywhere + digits-only" upgrade.
+
 ## Known gaps / next steps
 
 - **Ephemeral tunnel URL.** cloudflared quick tunnels get a new URL each run, so
