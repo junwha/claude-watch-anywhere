@@ -78,6 +78,26 @@ manually** and enter the LAN IP / tunnel URL, then the code.
 
 ---
 
+## Enable Developer Mode (required — fixes the infinite install spinner)
+
+watchOS won't install a development build until Developer Mode is on. The toggle
+often only appears after Xcode has tried an install **and** the device restarts.
+
+1. **iPhone first:** Settings → Privacy & Security → (bottom) **Developer Mode →
+   On** → restart the iPhone. (If it's missing on the iPhone too, do one Xcode ▶
+   run to the iPhone and it appears.)
+2. **Restart the watch** (side button → Power Off → on).
+3. On the watch: Settings → Privacy & Security → scroll to the bottom →
+   **Developer Mode → On** (it asks to restart again). Requires watchOS 9+.
+4. Still missing? Run ▶ from Xcode again — a "Developer Mode required" prompt
+   appears, after which the toggle shows up.
+
+If the watch shows an **endless "Installing…" spinner**: cancel it (iPhone Watch
+app → the app → turn its install toggle off), enable Developer Mode as above,
+then redeploy **via the iPhone scheme** (not directly to the watch). Keep the
+watch on its charger, unlocked, right next to the iPhone, on the same Wi-Fi, and
+out of Low Power Mode. If it still hangs, restart both devices and retry once.
+
 ## Troubleshooting
 - **"Signing for ClaudeWatch requires a development team"** — you skipped Step 2
   for one of the two targets. Set the Team on **both**.
@@ -87,6 +107,14 @@ manually** and enter the LAN IP / tunnel URL, then the code.
 - **"unsupported architecture" / build errors** — Xcode menu **Product → Clean
   Build Folder** (Cmd+Shift+K), then Run again. Make sure the scheme is
   **ClaudeWatch**, not ClaudeWatchWatch.
+- **"The app could not be installed at this time"** — usually a signing/leftover
+  conflict. Fixes, in order: (1) **delete any existing copy** of the app from BOTH
+  the iPhone and the watch (an old build with a different signature blocks the new
+  one); (2) confirm Developer Mode is actually **On** (above); (3) **Product →
+  Clean Build Folder** (Cmd+Shift+K) and Run again; (4) confirm bundle IDs match —
+  iPhone `com.you.claudewatch`, watch `com.you.claudewatch.watchkitapp` (the sed
+  one-liner keeps them in sync); (5) restart both devices and retry — it's often
+  transient ("this time").
 - **Free Apple ID** — apps signed with a free account **stop working after 7
   days**; just re-run Step 4 to reinstall. A paid Apple Developer account
   ($99/yr) removes this limit.
