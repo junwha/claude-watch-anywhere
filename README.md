@@ -145,6 +145,9 @@ The quickest path (installs deps, generates the project, opens Xcode):
 ./build.sh --open
 ```
 
+Then follow **[WATCH_INSTALL.md](WATCH_INSTALL.md)** for the step-by-step Xcode →
+Apple Watch install (signing, running to the iPhone, getting it onto the watch).
+
 Or manually:
 
 ```bash

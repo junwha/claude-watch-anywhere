@@ -139,14 +139,24 @@ fi
 
 cat <<EOF
 
-$(say "Watch app ready.")
+$(say "Watch app ready. Xcode is open — now install it on your watch:")
   Relay URL : ${RELAY_URL:-<none — LAN/manual only>}
 $( [ -n "$RELAY_SECRET" ] && echo "  Relay secret (for the bridge .env on other machines): $RELAY_SECRET" )
 
-Next:
-  • In Xcode: set your Development Team on BOTH targets, pick your watch, Run.
-  • Install the Claude plugin on the machine you run Claude on:  ./install.sh
-  • Start the bridge + pair:  inside Claude run  /claude-watch-anywhere:claude-watch
+  INSTALL ON THE WATCH  (full friendly guide: WATCH_INSTALL.md)
+  1. Plug in your iPhone (it must be paired to the watch); tap Trust if asked.
+  2. In Xcode left sidebar → ClaudeWatch project → for BOTH targets
+     (ClaudeWatch + ClaudeWatchWatch): Signing & Capabilities →
+     tick "Automatically manage signing" → set Team to your Apple ID.
+  3. Top bar: scheme = ClaudeWatch (the iPhone app), destination = your iPhone.
+  4. Press ▶ (Cmd+R). It installs on the phone and pushes the watch app over.
+  5. If prompted on iPhone: Settings → General → VPN & Device Management → Trust.
+  6. Watch app on iPhone → Available Apps → Install "Agent Watch" (if not automatic).
+  7. Open it on the watch and type the 6-digit pairing code.
+
+  Then, on the machine you run Claude:  ./install.sh
+  Start the bridge + get the code:      inside Claude run /claude-watch-anywhere:claude-watch
+  Stuck? See WATCH_INSTALL.md (signing errors, "won't appear on watch", 7-day free-account note).
 EOF
 
 [ "$DO_OPEN" = 1 ] && { say "Opening Xcode"; open "$PROJ"; }
