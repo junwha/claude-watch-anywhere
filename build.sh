@@ -50,7 +50,8 @@ ensure node node
 [ "$(node -p 'process.versions.node.split(".")[0]')" -ge 18 ] || die "Node >=18 required."
 ensure xcodegen xcodegen
 command -v xcodebuild >/dev/null 2>&1 || die "Xcode not installed (App Store)."
-[ "$DO_RELAY" = 1 ] && ensure wrangler wrangler || true
+# wrangler is run via `npx` (Homebrew disabled the formula; Cloudflare ships it on npm).
+command -v npx >/dev/null 2>&1 || die "npx not found (comes with Node)."
 
 # ---------------------------------------------------------------------------
 # 2. Bridge deps
@@ -64,15 +65,15 @@ say "Phase 2/5 — bridge dependencies"
 RELAY_SECRET=""
 if [ "$DO_RELAY" = 1 ] && [ -z "${RELAY_URL:-}" ]; then
   say "Phase 3/5 — deploying the rendezvous relay (Cloudflare)"
-  ( cd "$RELAY_DIR" && npm install >/dev/null 2>&1 || true )
+  ( cd "$RELAY_DIR" && npm install )   # pulls wrangler (devDependency)
 
   warn "A browser will open for 'wrangler login' if you're not logged in."
-  ( cd "$RELAY_DIR" && wrangler whoami >/dev/null 2>&1 || wrangler login )
+  ( cd "$RELAY_DIR" && npx wrangler whoami >/dev/null 2>&1 || npx wrangler login )
 
   # KV namespace (only if not yet wired into wrangler.toml)
   if grep -q "REPLACE_WITH_YOUR_KV_NAMESPACE_ID" "$RELAY_DIR/wrangler.toml"; then
     say "Creating KV namespace PAIRINGS"
-    KV_OUT="$(cd "$RELAY_DIR" && wrangler kv namespace create PAIRINGS 2>&1)" || { echo "$KV_OUT"; die "KV create failed"; }
+    KV_OUT="$(cd "$RELAY_DIR" && npx wrangler kv namespace create PAIRINGS 2>&1)" || { echo "$KV_OUT"; die "KV create failed"; }
     KV_ID="$(printf '%s' "$KV_OUT" | grep -oE '[0-9a-f]{32}' | head -1)"
     [ -n "$KV_ID" ] || { echo "$KV_OUT"; die "Could not parse KV id — paste it into relay/wrangler.toml manually."; }
     sed -i '' "s/REPLACE_WITH_YOUR_KV_NAMESPACE_ID/$KV_ID/" "$RELAY_DIR/wrangler.toml"
@@ -82,10 +83,10 @@ if [ "$DO_RELAY" = 1 ] && [ -z "${RELAY_URL:-}" ]; then
   # Shared secret (auto-generated, stored to bridge .env)
   RELAY_SECRET="$(openssl rand -hex 16)"
   say "Setting RELAY_SECRET"
-  ( cd "$RELAY_DIR" && printf '%s' "$RELAY_SECRET" | wrangler secret put RELAY_SECRET >/dev/null )
+  ( cd "$RELAY_DIR" && printf '%s' "$RELAY_SECRET" | npx wrangler secret put RELAY_SECRET >/dev/null )
 
   say "Deploying Worker"
-  DEPLOY_OUT="$(cd "$RELAY_DIR" && wrangler deploy 2>&1)" || { echo "$DEPLOY_OUT"; die "wrangler deploy failed"; }
+  DEPLOY_OUT="$(cd "$RELAY_DIR" && npx wrangler deploy 2>&1)" || { echo "$DEPLOY_OUT"; die "wrangler deploy failed"; }
   RELAY_URL="$(printf '%s' "$DEPLOY_OUT" | grep -oE 'https://[a-z0-9.-]+\.workers\.dev' | head -1)"
   [ -n "$RELAY_URL" ] || { echo "$DEPLOY_OUT"; die "Could not parse the Worker URL from wrangler output."; }
   say "Relay live: $RELAY_URL"

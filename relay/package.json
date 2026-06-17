@@ -8,5 +8,8 @@
     "deploy": "wrangler deploy",
     "dev": "wrangler dev",
     "test": "node test.mjs"
+  },
+  "devDependencies": {
+    "wrangler": "^4"
   }
 }

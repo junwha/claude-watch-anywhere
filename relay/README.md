@@ -10,14 +10,20 @@ Bridge (Windows) ──register: code → tunnelURL──▶ [ Worker + KV ] ◀
 
 ## Deploy (one-time, free tier)
 
+Wrangler ships on npm (Homebrew disabled its formula), so use `npx wrangler` —
+`npm install` here pulls it in as a devDependency, no global install needed.
+
 ```bash
 cd relay
-npm i -g wrangler          # or use: npx wrangler ...
-wrangler login
-wrangler kv namespace create PAIRINGS   # copy the printed id into wrangler.toml
-wrangler secret put RELAY_SECRET        # enter any random string; remember it
-wrangler deploy                         # prints https://claude-watch-relay.<you>.workers.dev
+npm install                                 # installs wrangler locally
+npx wrangler login
+npx wrangler kv namespace create PAIRINGS   # copy the printed id into wrangler.toml
+npx wrangler secret put RELAY_SECRET        # enter any random string; remember it
+npx wrangler deploy                         # prints https://claude-watch-relay.<you>.workers.dev
 ```
+
+(Or just run `./build.sh` from the repo root, which does all of this and injects
+the resulting URL into the watch app.)
 
 ## Wire it up
 
