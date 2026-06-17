@@ -8,6 +8,7 @@
 #   ./build.sh --archive           # ...and also do a CLI build (needs DEVELOPMENT_TEAM or simulator)
 #   ./build.sh --no-relay          # skip the Cloudflare relay step (LAN/manual pairing only)
 #   RELAY_URL=https://x.workers.dev ./build.sh   # reuse an already-deployed relay (no wrangler)
+#   BUNDLE_ID=com.you.claudewatch ./build.sh     # use YOUR unique app id (fixes signing rejection)
 #
 # NOTE: installing the Claude Code PLUGIN is a SEPARATE step — see ./install.sh.
 # It runs on whatever machine you run Claude on (which may not be this Mac).
@@ -62,6 +63,12 @@ say "Phase 2/5 — bridge dependencies"
 # ---------------------------------------------------------------------------
 # 3. Relay deploy (Cloudflare Worker) -> RELAY_URL
 # ---------------------------------------------------------------------------
+# Reuse an already-deployed relay (from a previous run) so re-runs don't redeploy.
+if [ -z "${RELAY_URL:-}" ] && [ -f "$BRIDGE/.env" ]; then
+  EXISTING="$(grep -E '^CLAUDE_WATCH_RELAY=' "$BRIDGE/.env" | cut -d= -f2-)"
+  [ -n "$EXISTING" ] && { RELAY_URL="$EXISTING"; say "Reusing relay from $BRIDGE/.env: $RELAY_URL"; }
+fi
+
 RELAY_SECRET=""
 if [ "$DO_RELAY" = 1 ] && [ -z "${RELAY_URL:-}" ]; then
   say "Phase 3/5 — deploying the rendezvous relay (Cloudflare)"
@@ -122,6 +129,16 @@ fi
 # 5. Xcode project + build
 # ---------------------------------------------------------------------------
 say "Phase 5/5 — generating Xcode project"
+# Bundle id must be unique to YOUR Apple team. Default com.shobhit.* is the
+# original author's and Apple will reject it ("app identifier cannot be
+# registered"). Pass BUNDLE_ID=com.you.claudewatch to rewrite it (watch suffix
+# and the watch's WKCompanionAppBundleIdentifier are kept in sync).
+if [ -n "${BUNDLE_ID:-}" ]; then
+  CUR="$(grep -m1 'bundleIdPrefix:' "$IOS_DIR/project.yml" | awk '{print $2}')"
+  [ -n "$CUR" ] || die "couldn't detect current bundle id in project.yml"
+  say "Rewriting bundle id: $CUR -> $BUNDLE_ID"
+  sed -i '' "s|$CUR|$BUNDLE_ID|g" "$IOS_DIR/project.yml" "$IOS_DIR/ClaudeWatch watchOS/Info.plist"
+fi
 ( cd "$IOS_DIR" && xcodegen generate )
 [ -d "$PROJ" ] || die "xcodegen did not produce $PROJ"
 

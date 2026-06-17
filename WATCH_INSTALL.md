@@ -34,10 +34,17 @@ In Xcode's left sidebar, click the blue **ClaudeWatch** project at the top, then
    in with your Apple ID, then pick it.)
 4. Repeat 1–3 for the **ClaudeWatchWatch** target.
 
-If you see **"bundle identifier is not available"**, change the prefix to
-something unique to you: open `ios/ClaudeWatch/project.yml`, replace every
-`com.shobhit.claudewatch` with `com.YOURNAME.claudewatch`, then re-run
-`./build.sh --no-relay` (regenerates the project) and redo signing.
+If you see **"bundle identifier is not available"** or **"the app identifier
+cannot be registered to your development team"**, the default id is the original
+author's — use your own. Easiest:
+
+```bash
+BUNDLE_ID=com.YOURNAME.claudewatch ./build.sh    # reuses your relay, rewrites the id, regenerates
+```
+
+Or manually: `cd ios/ClaudeWatch && sed -i '' 's/com\.shobhit\.claudewatch/com.YOURNAME.claudewatch/g' project.yml "ClaudeWatch watchOS/Info.plist" && xcodegen generate`.
+Then redo signing (Step 2). If `com.YOURNAME.claudewatch` is also taken, make it
+more unique (e.g. `com.YOURNAME.cw`).
 
 ## Step 3 — Choose where to run
 At the top of the Xcode window, next to the ▶ button:
